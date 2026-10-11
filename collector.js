@@ -163,11 +163,14 @@ async function getDexCandidates() {
 }
 
 function chooseBestPairs(pairs, candidateMap) {
-  // A Pump.fun launch should be the BASE token of its own market.
-  // Matching a candidate as quote token can attach a completely unrelated
-  // old market (e.g. a legacy major token used as quote) to a fresh launch.
+  // A genuine fresh launch cannot have ANY market pair that predates our observed
+  // creation event. If even one older pair exists for the same mint, the mint is
+  // pre-existing and must be excluded entirely, even if DexScreener also returns
+  // a brand-new pair for it. This prevents legacy mints such as BONK from being
+  // attached to a fresh PumpPortal metadata event.
   const best = new Map();
   const staleMints = new Set();
+
   for (const pair of pairs || []) {
     if (String(pair?.chainId || '').toLowerCase() !== 'solana') continue;
     const mint = pair?.baseToken?.address;
@@ -176,8 +179,7 @@ function chooseBestPairs(pairs, candidateMap) {
     const local = candidateMap.get(mint);
     const localCreated = Date.parse(local?.created_at || '');
     const pairCreated = Number(pair?.pairCreatedAt || 0);
-    // Pair cannot pre-date our observed token creation by more than a small clock/indexer tolerance.
-    // This catches stale/legacy mint mismatches before they poison MC/volume rankings.
+
     if (Number.isFinite(localCreated) && localCreated > 0 && pairCreated > 0 && pairCreated < localCreated - 10 * 60_000) {
       staleMints.add(mint);
       continue;
@@ -187,6 +189,11 @@ function chooseBestPairs(pairs, candidateMap) {
     const prev = best.get(mint);
     if (!prev || liq > num(prev?.liquidity?.usd)) best.set(mint, pair);
   }
+
+  // Critical v1.4 guard: an old pair is proof that the mint existed before this
+  // launch event. Do not allow a newer secondary pair to override that evidence.
+  for (const mint of staleMints) best.delete(mint);
+
   return { best, staleMints };
 }
 
@@ -195,7 +202,7 @@ async function fetchDexBatch(addresses) {
   const url = `https://api.dexscreener.com/tokens/v1/solana/${joined}`;
   state.dexRequests += 1;
   const response = await fetch(url, {
-    headers: { accept: 'application/json', 'user-agent': 'KINGMAKER/1.3' },
+    headers: { accept: 'application/json', 'user-agent': 'KINGMAKER/1.4' },
   });
   if (response.status === 429) throw new Error('DexScreener rate limit (429)');
   if (!response.ok) throw new Error(`DexScreener HTTP ${response.status}`);
@@ -290,7 +297,7 @@ async function enrichDex() {
 
     state.dexPairsSeen += pairsThisRun;
     state.dexTokensUpdated += updatedThisRun;
-    console.log(`[dex] candidates=${candidates.length} pairs=${pairsThisRun} updated=${updatedThisRun} (v1.3 integrity guards)`);
+    console.log(`[dex] candidates=${candidates.length} pairs=${pairsThisRun} updated=${updatedThisRun} (v1.4 strict stale-mint guard)`);
   } catch (error) {
     state.lastDexError = error?.message || String(error);
     console.error('[dex]', state.lastDexError);
@@ -356,7 +363,7 @@ function connect() {
 const server = http.createServer((req, res) => {
   if (req.url === '/' || req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ ok: true, service: 'KINGMAKER Collector', version: '1.3', ...state }, null, 2));
+    res.end(JSON.stringify({ ok: true, service: 'KINGMAKER Collector', version: '1.4', ...state }, null, 2));
     return;
   }
   res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
