@@ -82,7 +82,7 @@ async function saveCreate(ev) {
     symbol: ev.symbol || null,
     updated_at: nowIso(),
   };
-  const { error } = await supabase.from('tokens').upsert(row, { onConflict: 'mint' });
+  const { error } = await supabase.from('tokens').upsert(row, { onConflict: 'mint', ignoreDuplicates: true });
   if (error) {
     state.dbErrors += 1;
     state.lastError = `create DB: ${error.message}`;
@@ -163,17 +163,31 @@ async function getDexCandidates() {
 }
 
 function chooseBestPairs(pairs, candidateMap) {
+  // A Pump.fun launch should be the BASE token of its own market.
+  // Matching a candidate as quote token can attach a completely unrelated
+  // old market (e.g. a legacy major token used as quote) to a fresh launch.
   const best = new Map();
+  const staleMints = new Set();
   for (const pair of pairs || []) {
-    const base = pair?.baseToken?.address;
-    const quote = pair?.quoteToken?.address;
-    const mint = candidateMap.has(base) ? base : candidateMap.has(quote) ? quote : null;
-    if (!mint) continue;
+    if (String(pair?.chainId || '').toLowerCase() !== 'solana') continue;
+    const mint = pair?.baseToken?.address;
+    if (!mint || !candidateMap.has(mint)) continue;
+
+    const local = candidateMap.get(mint);
+    const localCreated = Date.parse(local?.created_at || '');
+    const pairCreated = Number(pair?.pairCreatedAt || 0);
+    // Pair cannot pre-date our observed token creation by more than a small clock/indexer tolerance.
+    // This catches stale/legacy mint mismatches before they poison MC/volume rankings.
+    if (Number.isFinite(localCreated) && localCreated > 0 && pairCreated > 0 && pairCreated < localCreated - 10 * 60_000) {
+      staleMints.add(mint);
+      continue;
+    }
+
     const liq = num(pair?.liquidity?.usd);
     const prev = best.get(mint);
     if (!prev || liq > num(prev?.liquidity?.usd)) best.set(mint, pair);
   }
-  return best;
+  return { best, staleMints };
 }
 
 async function fetchDexBatch(addresses) {
@@ -181,7 +195,7 @@ async function fetchDexBatch(addresses) {
   const url = `https://api.dexscreener.com/tokens/v1/solana/${joined}`;
   state.dexRequests += 1;
   const response = await fetch(url, {
-    headers: { accept: 'application/json', 'user-agent': 'KINGMAKER/1.2' },
+    headers: { accept: 'application/json', 'user-agent': 'KINGMAKER/1.3' },
   });
   if (response.status === 429) throw new Error('DexScreener rate limit (429)');
   if (!response.ok) throw new Error(`DexScreener HTTP ${response.status}`);
@@ -214,8 +228,29 @@ async function enrichDex() {
       }
 
       pairsThisRun += Array.isArray(pairs) ? pairs.length : 0;
-      const bestPairs = chooseBestPairs(pairs, candidateMap);
+      const { best: bestPairs, staleMints } = chooseBestPairs(pairs, candidateMap);
       const rows = [];
+
+      // Clear previously-enriched values if a candidate only resolves to a market
+      // that existed before the token was observed. This is a data-integrity guard.
+      for (const mint of staleMints) {
+        if (bestPairs.has(mint)) continue;
+        const old = candidateMap.get(mint);
+        if (!old) continue;
+        if (num(old.market_cap_usd) === 0 && num(old.volume_24h_usd) === 0) continue;
+        rows.push({
+          ...old,
+          market_cap_usd: 0,
+          peak_market_cap_usd: 0,
+          volume_24h_usd: 0,
+          liquidity_usd: 0,
+          txns_24h: 0,
+          buys_24h: 0,
+          sells_24h: 0,
+          price_change_24h: 0,
+          updated_at: nowIso(),
+        });
+      }
 
       for (const [mint, pair] of bestPairs) {
         const old = candidateMap.get(mint);
@@ -255,7 +290,7 @@ async function enrichDex() {
 
     state.dexPairsSeen += pairsThisRun;
     state.dexTokensUpdated += updatedThisRun;
-    console.log(`[dex] candidates=${candidates.length} pairs=${pairsThisRun} updated=${updatedThisRun}`);
+    console.log(`[dex] candidates=${candidates.length} pairs=${pairsThisRun} updated=${updatedThisRun} (v1.3 integrity guards)`);
   } catch (error) {
     state.lastDexError = error?.message || String(error);
     console.error('[dex]', state.lastDexError);
@@ -321,7 +356,7 @@ function connect() {
 const server = http.createServer((req, res) => {
   if (req.url === '/' || req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ ok: true, service: 'KINGMAKER Collector', version: '1.2', ...state }, null, 2));
+    res.end(JSON.stringify({ ok: true, service: 'KINGMAKER Collector', version: '1.3', ...state }, null, 2));
     return;
   }
   res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
