@@ -10,6 +10,75 @@ const DEX_REFRESH_MS = Number(process.env.DEX_REFRESH_MS || 120000); // 2 min
 const DEX_MAX_GRADUATED = Number(process.env.DEX_MAX_GRADUATED || 300);
 const DEX_MAX_RECENT = Number(process.env.DEX_MAX_RECENT || 120);
 
+const SUPPORTED_PAIR_ASSET_MINTS = new Set([
+  'So11111111111111111111111111111111111111112',
+  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  'XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp',
+  'Xs6B6zawENwAbWVi7w92rjazLuAr5Az59qgWKcNb45x',
+  'XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W',
+  'Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re',
+  'XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN',
+  'XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB',
+  'XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg',
+  'Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh',
+  'XsueG8BtpquVJX9LVLLEGuViXUungE6WmK5YZ3p3bd1',
+  'Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg',
+  'Xs7ZdzSHLU9ftNJsii5fCeJhoRWSC32SQGzGQtePxNu',
+  'XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ',
+  'Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu',
+  'Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ',
+  'XsqE9cRRpzxcGKDXj1BJ7Xmg4GRhZoyY1KpmGSxAWT2',
+  'XsgSaSvNSqLTtFuyWPBhK9196Xb9Bbdyjj4fH3cPJGo',
+  'XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX',
+  'XsoBhf2ufR8fTyNSjqfU71DYGaE6Z3SUGAidpzriAA4',
+  'Xs78JED6PFZxWc2wCEPspZW9kL3Se5J7L5TChKgsidH',
+  'XsaBXg8dU5cPM6ehmVctMkVqoiRG2ZjMo1cyBJ3AykQ',
+  'Xsf9mBktVB9BSU5kf4nHxPq5hCBJ2j2ui3ecFGxPRGc',
+  'XshPgPdXFRWB8tP1j82rebb2Q9rPgGX37RuqzohmArM',
+  'XsfCC9VL4DamVGNgdJpfLXB3sBVa158Gbx8sh7NzmTk',
+  'PEAQjk7SRS6rXHVFFmpRr7zrC4g5ZuEebpwTxvaLr3b',
+  'NKEda5nHhNGgjrE9nDdMvaEmkmJ96qqxzBVZEcKmjSg',
+  'DoGEV7LASBkQbibMc5k5vKnTZoMg423GpJ5QtJEGfm7R',
+  'ARBzQTYDCW2KnVEjs1Mc81LekB1ibVFZKbSVmorkoT9d',
+  'AMC1qwR9KhiyrQBRPrxnfo4JfMeMZqEBvt5tgTytNNoc',
+  'GPRR2u6NS5yBQHWGauoJ9HXgjrTH8dDsrBfTV5zAYvDH',
+  '98sMhvDwXj1RQi5c5Mndm3vPe9cBqPrbLaufMXFNMh5g',
+  'A7bdiYdS5GjqGFtxf17ppRHtDKPkkRqbKtR27dxvQXaS',
+  '3ZLekZYq2qkZiSpnSvabjit34tUkjSwD1JFuW9as9wBG',
+  '6UpQcMAb5xMzxc7ZfPaVMgx3KqsvKZdT5U718BzD5We2',
+  'WXMRyRZhsa19ety5erZhHg4N3xj3EVN92u94422teJp',
+  'BArimz1PcKZr8PcPh3tcZ2dg4S7FJLk3cw6R5F8GsHKg',
+  'DJTu7vi8norVzdVAffgvb39VP7wjKeTsgaMBJrzfxvoF',
+  'HiMSSzzwkZkrXJ4PGVJRdtfLaANeAztjjcgk5Dxe7Lwx',
+  'BMKdM4yUxX12moFqVk195k7coMbaybd4RUKCUdm7D1Sk',
+  'JNJg1znKdF712Phe7L7z52AATAvEjEytBdN2w8Lnh1Y',
+  'LMT3i1BHgixFqPUgcyteJhnEz2dpy9i3cYy4pi9BoeV',
+  'EicWvteVi2fWepEzS3FYWsnuPoP6caZfjnKqNvydLjCH',
+  'pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn',
+  'BABANGA4JE7Kkam4nTrALAwAVgsNJUuFJnnkF7S16BZp',
+  'BULL151gUXcFV5wXEUqu9Am2L7Qt4bTJRLRuAUjkcspC',
+  'CZEB3WNZuF2Yz1z2H81RcCk8T7fsw82KB33zqamASVsg',
+  'DELL2aRKQz7DMq5DrKLtkn47ZCnbxXPZXrSGbkmd13wy',
+  '9cRCn9rGT8V2imeM2BaKs13yhMEais3ruM3rPvTGpump',
+  'DKNGQFNGQmoBdXSRGKJ8tTu7uPDasw5JDcfMmWniNfow',
+  'oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp',
+  'GRNDYDpqwpCm6jVxpbh4xT5AM4r3p391qYsKTHqgaET2',
+  'DNUTsCvKbKwu2RM72cUuW3TD9YpzArzACcqYQssjPLSk',
+  'J8PSdNP3QewKq2Z1JJJFDMaqF7KcaiJhR7gbr5KZpump',
+  '6AJcP7wuLwmRYLBNbi825wgguaPsWzPBEHcHndpRpump',
+  '6NwarBvDkXhByqVp2Qkq5i9XbtA2B3Bwe8SWGu9vpump',
+  'he1iusmfkpAdwvxLNGV8Y1iSbj4rUy6yMhEA3fotn9A',
+  'SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3',
+  'Dz9mQ9NzkBcCsuGPFJ3r1bS4wgqKMHBPiVuniW8Mbonk',
+  'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+  'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm',
+  '6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN',
+  'METvsvVRapdj9cFLzq4Tr43xK4tAjQfwX76z3n6mWQL',
+  '8XtRWb4uAAJFMP4QQhoYYCWR6XXb7ybcCdiqPwz9s5WS',
+  'GkyPYa7NnCFbduLknCfBfP7p8564X1VZhwZYJ6CZpump',
+]);
+
+
 for (const [name, value] of Object.entries({ SUPABASE_URL, SUPABASE_KEY, PUMPPORTAL_API_KEY })) {
   if (!value) {
     console.error(`[fatal] Missing environment variable: ${name}`);
@@ -73,6 +142,14 @@ async function saveCreate(ev) {
   const creator = ev.traderPublicKey || ev.creator;
   if (!mint || !creator) {
     console.warn('[create] skipped: missing mint/creator', Object.keys(ev));
+    return;
+  }
+  // Pump.fun custom-pair launches can surface the paired/quote asset in the
+  // generic `mint` field. A supported pair asset is never the newly-created coin.
+  // Until we parse the custom-pair base-mint field reliably, skip these events
+  // rather than poison the leaderboard with legacy assets such as BONK/SPYX.
+  if (SUPPORTED_PAIR_ASSET_MINTS.has(mint)) {
+    console.warn(`[create][skip-pair-asset] ${ev.symbol || '?'} ${short(mint)} keys=${Object.keys(ev).join(',')}`);
     return;
   }
   const row = {
@@ -159,7 +236,7 @@ async function getDexCandidates() {
 
   const map = new Map();
   for (const row of [...(graduated || []), ...(recent || [])]) map.set(row.mint, row);
-  return [...map.values()];
+  return [...map.values()].filter(row => !SUPPORTED_PAIR_ASSET_MINTS.has(row.mint));
 }
 
 function chooseBestPairs(pairs, candidateMap) {
@@ -202,7 +279,7 @@ async function fetchDexBatch(addresses) {
   const url = `https://api.dexscreener.com/tokens/v1/solana/${joined}`;
   state.dexRequests += 1;
   const response = await fetch(url, {
-    headers: { accept: 'application/json', 'user-agent': 'KINGMAKER/1.4' },
+    headers: { accept: 'application/json', 'user-agent': 'KINGMAKER/1.5' },
   });
   if (response.status === 429) throw new Error('DexScreener rate limit (429)');
   if (!response.ok) throw new Error(`DexScreener HTTP ${response.status}`);
@@ -297,7 +374,7 @@ async function enrichDex() {
 
     state.dexPairsSeen += pairsThisRun;
     state.dexTokensUpdated += updatedThisRun;
-    console.log(`[dex] candidates=${candidates.length} pairs=${pairsThisRun} updated=${updatedThisRun} (v1.4 strict stale-mint guard)`);
+    console.log(`[dex] candidates=${candidates.length} pairs=${pairsThisRun} updated=${updatedThisRun} (v1.5 supported-pair + stale-mint guards)`);
   } catch (error) {
     state.lastDexError = error?.message || String(error);
     console.error('[dex]', state.lastDexError);
@@ -363,7 +440,7 @@ function connect() {
 const server = http.createServer((req, res) => {
   if (req.url === '/' || req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ ok: true, service: 'KINGMAKER Collector', version: '1.4', ...state }, null, 2));
+    res.end(JSON.stringify({ ok: true, service: 'KINGMAKER Collector', version: '1.5', ...state }, null, 2));
     return;
   }
   res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
